@@ -4,46 +4,39 @@ import http from "http";
 import { Server } from "socket.io";
 import WebSocket, { WebSocketServer } from "ws";
 import path from "path";
+import { fileURLToPath } from "url";
 
+// ================= APP =================
 const app = express();
 
-// Fix __dirname in ES module
-const __filename = path.resolve("ROVER");
+// ✅ FIX __dirname for ES Modules
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Middleware
 app.use(express.json());
 
-// Static folder
+// Static
 app.use("/static", express.static(path.join(__dirname, "public")));
-
-// Template (views) folder
-app.set("views", path.join(__dirname, "template"));
 app.use("/three", express.static(path.join(__dirname, "node_modules/three/build")));
-app.use("/socket", express.static(path.join(__dirname, "node_modules/socket.io/client-dist")));
 
-console.log(path.join(__dirname, "node_modules/three/build"), path.join(__dirname, "node_modules/socket.io/client-dist"));
-// Set template engine (example: EJS)
+// Views
+app.set("views", path.join(__dirname, "template"));
 app.set("view engine", "ejs");
 
-const server = http.createServer(app);
+// ================= HTTP + SOCKET.IO (WEB) =================
+const httpServer = http.createServer(app);
 
-// Socket.IO for frontend
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-  },
+const io = new Server(httpServer, {
+  cors: { origin: "*" },
 });
-
-// Raw WebSocket for ESP32
-const wss = new WebSocketServer({ server });
 
 // UI route
 app.get("/", (req, res) => {
   res.render("index");
 });
 
-// ================= SOCKET.IO (Web Dashboard) =================
+// Web dashboard
 io.on("connection", (socket) => {
   console.log("Web client connected:", socket.id);
 
@@ -53,18 +46,19 @@ io.on("connection", (socket) => {
 });
 
 // ================= RAW WEBSOCKET (ESP32) =================
+// ⚠️ SEPARATE SERVER → NO CONFLICT
+const wss = new WebSocketServer({ port: 8080 });
+
 wss.on("connection", (ws) => {
-  console.log("ESP32 connected");
+  console.log("ESP32 connected (WS)");
 
   ws.on("message", (message) => {
     try {
       const data = JSON.parse(message.toString());
 
-      console.log("Gyroscope Data:", data);
-
-      // Forward ESP32 data to all dashboards
+      // Forward to dashboards
       io.emit("gyroscope_data", data);
-    } catch (err) {
+    } catch {
       console.error("Invalid JSON from ESP32");
     }
   });
@@ -74,19 +68,24 @@ wss.on("connection", (ws) => {
   });
 });
 
-let getLocalip = () => {    
-    const interfaces = os.networkInterfaces()
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address
-            }
-        }
+// ================= NETWORK INFO =================
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        return iface.address;
+      }
     }
+  }
 }
-console.log("Server IP Address:", getLocalip());
 
+console.log("Server IP Address:", getLocalIP());
+
+// ================= START =================
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+
+httpServer.listen(PORT, "0.0.0.0", () => {
+  console.log(`Web server running on http://localhost:${PORT}`);
+  console.log(`ESP32 WS listening on ws://${getLocalIP()}:8080`);
 });

@@ -1,9 +1,7 @@
-
 console.log("JS Loaded");
 
 import * as THREE from "/three/three.module.js";
-
-import { io } from "/socket/socket.io.js";
+// import { OrbitControls } from "/three/examples/jsm/controls/OrbitControls.js";
 
 // ===== SOCKET.IO =====
 const socket = io();
@@ -22,13 +20,16 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+// ✅ ORBIT CONTROLS
+
+
 // Cube (IMU body)
 const geometry = new THREE.BoxGeometry(1, 0.2, 2);
 const material = new THREE.MeshNormalMaterial();
 const cube = new THREE.Mesh(geometry, material);
 scene.add(cube);
 
-camera.position.z = 3;
+camera.position.set(0, 1, 3);
 
 // Light
 const light = new THREE.DirectionalLight(0xffffff, 1);
@@ -40,7 +41,6 @@ let rx = 0, ry = 0, rz = 0;
 
 // ===== RECEIVE DATA =====
 socket.on("gyroscope_data", (data) => {
-  // gyro deg/sec → radians integration
   rx += data.gx * 0.002;
   ry += data.gy * 0.002;
   rz += data.gz * 0.002;
@@ -52,7 +52,9 @@ socket.on("gyroscope_data", (data) => {
 // ===== ANIMATION LOOP =====
 function animate() {
   requestAnimationFrame(animate);
+
   cube.rotation.set(rx, ry, rz);
+
   renderer.render(scene, camera);
 }
 
